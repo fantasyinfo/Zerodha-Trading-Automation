@@ -8,6 +8,8 @@ import {
   upload,
   _getPE_CE_StrikePrice,
   _calculate_Profit,
+  _getPE_CE_StrikePrice_Short,
+  _calculate_Profit_short,
 } from "./functions.js";
 import InstrumentsModel from "./models/InstrumentsModel.js";
 import StockScriptNameModel from "./models/StockScriptNameModel.js";
@@ -16,6 +18,8 @@ import csv from "csvtojson";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+
+const TOKEN_FROM_URI = "AP7R7jHanrY4NjirdHFHiuPz8gLgFeUV";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +62,24 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+/*
+{
+  buy: [
+    { quantity: 1000, price: 648.45, orders: 1 },
+    { quantity: 1000, price: 648.4, orders: 1 },
+    { quantity: 1000, price: 648.25, orders: 1 },
+    { quantity: 1000, price: 648.1, orders: 1 },
+    { quantity: 1000, price: 648.05, orders: 1 }
+  ],
+  sell: [
+    { quantity: 1000, price: 648.8, orders: 1 },
+    { quantity: 2000, price: 648.95, orders: 2 },
+    { quantity: 1000, price: 649, orders: 1 },
+    { quantity: 1000, price: 649.15, orders: 1 },
+    { quantity: 2000, price: 649.25, orders: 2 }
+  ]
+}
+*/
 async function init() {
   try {
     // Load the token from the file if it exists
@@ -83,7 +105,7 @@ async function init() {
 async function generateSession() {
   try {
     // You will still need to manually set the request token the first time
-    const requestToken = "ghUQoZZsJEbiz929NYnLV3O3Pt57ryj1";
+    const requestToken = TOKEN_FROM_URI;
     const response = await kc.generateSession(requestToken, apiSecret);
     kc.setAccessToken(response.access_token);
     ACCESS_TOKEN = response.access_token;
@@ -134,7 +156,7 @@ function setupTicker(accessToken) {
   // });
 
   ticker.on("connect", async () => {
-    console.log("Connected to ticker.");
+    console.log("Connected to ticker. ============ WORKING ==========");
 
     const dataArray = await readFileLinesAsNumbersStock();
 
@@ -159,8 +181,8 @@ function setupTicker(accessToken) {
   });
 
   ticker.on("ticks", (ticks) => {
-    //console.log(ticks);
     ticks.forEach((tick) => {
+      //console.log(tick.depth);
       // Use the instrument_token as the key and update with the latest tick data
       tickDataStoreFromTXT[tick.instrument_token] = tick;
     });
@@ -730,6 +752,10 @@ app.get("/subscribe-instruments-token", async (req, res) => {
           CEInstumentToken: 0,
           PEStrikePrice: 0,
           CEstrikePrice: 0,
+          PEStrikePriceS: 0,
+          CEstrikePriceS: 0,
+          PEInstrumentTokenShort: 0,
+          CEInstrumentTokenShort: 0,
           month: month,
           p1,
           p2,
@@ -777,8 +803,15 @@ app.get("/list-result-from-file", async (req, res) => {
           token.p2,
           token.roundoff
         );
+        let PE_CE_Strike_price_short = await _getPE_CE_StrikePrice_Short(
+          _openPriceFromStockTickData,
+          token.p1,
+          token.p2,
+          token.roundoff
+        );
 
         const { PEStrikePrice, CEstrikePrice } = PE_CE_Strike_price;
+        const { PEStrikePriceS, CEstrikePriceS } = PE_CE_Strike_price_short;
 
         // PE Instrument Token Processing
         const searchObjPE = {
@@ -798,18 +831,57 @@ app.get("/list-result-from-file", async (req, res) => {
         const instrumentDetailsPE = await InstrumentsModel.findOne(searchObjPE);
         const instrumentDetailsCE = await InstrumentsModel.findOne(searchObjCE);
 
-        if (instrumentDetailsPE && instrumentDetailsCE) {
+        // short
+        // PE Instrument Token Processing
+        const searchObjPEShort = {
+          name: token.stockName,
+          tradingsymbol: { $regex: token.month, $options: "i" },
+          instrument_type: "PE",
+          strike: PEStrikePriceS,
+        };
+        // CE Instrument Token Processing
+        const searchObjCEShort = {
+          name: token.stockName,
+          tradingsymbol: { $regex: token.month, $options: "i" },
+          instrument_type: "CE",
+          strike: CEstrikePriceS,
+        };
+
+        const instrumentDetailsPEShort = await InstrumentsModel.findOne(
+          searchObjPEShort
+        );
+        const instrumentDetailsCEShort = await InstrumentsModel.findOne(
+          searchObjCEShort
+        );
+        // short
+
+        if (instrumentDetailsPE && instrumentDetailsCE && instrumentDetailsPEShort && instrumentDetailsCEShort) {
           const PEInstrumentToken = instrumentDetailsPE.instrument_token;
           const CEInstrumentToken = instrumentDetailsCE.instrument_token;
 
+          // short
+          const PEInstrumentTokenShort =
+            instrumentDetailsPEShort.instrument_token;
+          const CEInstrumentTokenShort =
+            instrumentDetailsCEShort.instrument_token;
+
           await appendToFileAsyncStock(PEInstrumentToken.toString());
           await appendToFileAsyncStock(CEInstrumentToken.toString());
+
+          // short
+          await appendToFileAsyncStock(PEInstrumentTokenShort.toString());
+          await appendToFileAsyncStock(CEInstrumentTokenShort.toString());
+
           PECEInstumentToken.push({
             [token.stockInstumentToken]: {
               PEInstumentToken: PEInstrumentToken,
               CEInstumentToken: CEInstrumentToken,
               PEStrikePrice: PEStrikePrice,
               CEstrikePrice: CEstrikePrice,
+              PEStrikePriceS: PEStrikePriceS,
+              CEstrikePriceS: CEstrikePriceS,
+              PEInstrumentTokenShort: PEInstrumentTokenShort,
+              CEInstrumentTokenShort: CEInstrumentTokenShort,
             },
           });
         }
@@ -829,6 +901,57 @@ app.get("/list-result-from-file", async (req, res) => {
 
 // new functionjs as per vinod
 // step 3 get all data and return the result
+// app.get("/get-updated-always", async (req, res) => {
+//   try {
+//     const jsonData = await fetchAllDataFromJsonFile();
+//     if (!jsonData.length) {
+//       return res
+//         .status(404)
+//         .send("No Json Data Found, Please Run Step 1 & 2 First.");
+//     }
+
+//     // Use Promise.all to wait for all asynchronous operations to complete
+//     const sendJson = await Promise.all(
+//       jsonData.map(async (token) => {
+//         let item = {
+//           PEstrikePrice: token.PEStrikePrice,
+//           CEstrikePrice: token.CEstrikePrice,
+//         };
+
+//         // Iterate over the values of tickDataStoreFromTXT object
+//         for (const tick of Object.values(tickDataStoreFromTXT)) {
+//           // stocks
+//           if (tick.instrument_token == token.stockInstumentToken) {
+//             item.open = tick.last_price;
+//           }
+//           // pe
+//           if (tick.instrument_token == token.PEInstumentToken) {
+//             item.PEOpenPrice = tick.last_price;
+//           }
+//           // ce
+//           if (tick.instrument_token == token.CEInstumentToken) {
+//             item.CEOpenPrice = tick.last_price;
+//           }
+//         }
+
+//         let profits = [];
+//         if (item.open && item.PEOpenPrice && item.CEOpenPrice) {
+//           // Calculate the profits after processing all ticks
+//           profits = await _calculate_Profit(item);
+//         }
+
+//         if (profits) return { [token.stockName]: profits };
+//       })
+//     );
+
+//     res.status(200).json(sendJson);
+//   } catch (err) {
+//     console.error("Error processing /get-updated-always endpoint:", err);
+//     res.status(500).send("Failed to process list result.");
+//   }
+// });
+
+// step 3 get all data and return the result (with taken sell)
 app.get("/get-updated-always", async (req, res) => {
   try {
     const jsonData = await fetchAllDataFromJsonFile();
@@ -848,17 +971,18 @@ app.get("/get-updated-always", async (req, res) => {
 
         // Iterate over the values of tickDataStoreFromTXT object
         for (const tick of Object.values(tickDataStoreFromTXT)) {
+          //console.log(tick)
           // stocks
           if (tick.instrument_token == token.stockInstumentToken) {
-            item.open = tick.last_price;
+            item.open = tick.depth.sell[0]["price"];
           }
           // pe
           if (tick.instrument_token == token.PEInstumentToken) {
-            item.PEOpenPrice = tick.last_price;
+            item.PEOpenPrice = tick.depth.sell[0]["price"];
           }
           // ce
           if (tick.instrument_token == token.CEInstumentToken) {
-            item.CEOpenPrice = tick.last_price;
+            item.CEOpenPrice = tick.depth.buy[0]["price"];
           }
         }
 
@@ -878,6 +1002,69 @@ app.get("/get-updated-always", async (req, res) => {
     res.status(500).send("Failed to process list result.");
   }
 });
+
+app.get("/get-updated-always-short", async (req, res) => {
+  try {
+    const jsonData = await fetchAllDataFromJsonFile();
+    if (!jsonData.length) {
+      return res
+        .status(404)
+        .send("No Json Data Found, Please Run Step 1 & 2 First.");
+    }
+
+    // Use Promise.all to wait for all asynchronous operations to complete
+    const sendJson = await Promise.all(
+      jsonData.map(async (token) => {
+        let item = {
+          PEstrikePrice: token.PEStrikePriceS,
+          CEstrikePrice: token.CEstrikePriceS,
+          stockName: token.stockName
+        };
+
+        // Iterate over the values of tickDataStoreFromTXT object
+        for (const tick of Object.values(tickDataStoreFromTXT)) {
+          //console.log(tick)
+          // stocks
+          if (tick.instrument_token == token.stockInstumentToken) {
+            item.open = tick.depth.sell[0]["price"];
+          }
+          // pe
+          if (tick.instrument_token == token.PEInstrumentTokenShort) {
+            item.PEOpenPrice = tick.depth.sell[0]["price"];
+          }
+          // ce
+          if (tick.instrument_token == token.CEInstrumentTokenShort) {
+            item.CEOpenPrice = tick.depth.buy[0]["price"];
+          }
+        }
+
+        let profits = [];
+        if (item.open && item.PEOpenPrice && item.CEOpenPrice) {
+          // Calculate the profits after processing all ticks
+          profits = await _calculate_Profit_short(item);
+        }
+
+        if (profits) return { [token.stockName]: profits };
+      })
+    );
+
+    res.status(200).json(sendJson);
+  } catch (err) {
+    console.error("Error processing /get-updated-always endpoint:", err);
+    res.status(500).send("Failed to process list result.");
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
 
 app.get("/get-live-profit", async (req, res) => {
   const sendJson = [];
@@ -1052,6 +1239,13 @@ async function updateTokensInJsonFile(newValues) {
         data[stockName].CEInstumentToken = newTokens.CEInstumentToken;
         data[stockName].PEStrikePrice = newTokens.PEStrikePrice;
         data[stockName].CEstrikePrice = newTokens.CEstrikePrice;
+        data[stockName].CEstrikePriceS = newTokens.CEstrikePriceS;
+        data[stockName].PEStrikePriceS = newTokens.PEStrikePriceS;
+
+        data[stockName].PEInstrumentTokenShort =
+          newTokens.PEInstrumentTokenShort;
+        data[stockName].CEInstrumentTokenShort =
+          newTokens.CEInstrumentTokenShort;
       }
     });
 

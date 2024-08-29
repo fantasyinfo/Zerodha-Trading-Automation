@@ -106,6 +106,33 @@ export const _getPE_CE_StrikePrice = async (
   };
 };
 
+export const _getPE_CE_StrikePrice_Short = async (
+  _openPrice,
+  pe_gap,
+  ce_gap,
+  round_off
+) => {
+  const openPrice = parseFloat(_openPrice);
+  const roundUpPrice = round_off;
+
+  // Calculate the strike prices
+  const roundPriceWithPercentagePE_GAP = openPrice * (1 - parseFloat(pe_gap));
+  const roundPriceWithPercentageCE_GAP = openPrice * (1 - parseFloat(ce_gap));
+
+  const roundToNearest = (value) => {
+    const remainder = value % roundUpPrice;
+
+    return remainder < roundUpPrice / 2
+      ? value - remainder
+      : value + (roundUpPrice - remainder);
+  };
+
+  return {
+    PEStrikePriceS: Math.round(roundToNearest(roundPriceWithPercentagePE_GAP)),
+    CEstrikePriceS: Math.round(roundToNearest(roundPriceWithPercentageCE_GAP)),
+  };
+};
+
 export const _calculate_Profit = async (item) => {
   //console.log(item);
   // SS
@@ -128,6 +155,32 @@ export const _calculate_Profit = async (item) => {
 
   return item;
 };
+
+
+
+export const _calculate_Profit_short = async (item) => {
+  //console.log(item);
+  // SS
+  item.SS_ClosingPrice_0_point_25 = await returnSSPointsShort(item, 0.0025);
+  item.SS_ClosingPrice_0_point_5 = await returnSSPointsShort(item, 0.005);
+  item.SS_ClosingPrice_1_point_0 = await returnSSPointsShort(item, 0.01);
+  item.SS_ClosingPrice_3_point_0 = await returnSSPointsShort(item, 0.03);
+  item.SS_ClosingPrice_5_point_0 = await returnSSPointsShort(item, 0.05);
+  item.SS_ClosingPrice_7_point_5 = await returnSSPointsShort(item, 0.075);
+  item.SS_ClosingPrice_10_point_0 = await returnSSPointsShort(item, 0.1);
+  //console.log("############################################");
+  // BS
+  item.BS_ClosingPrice_0_point_25 = await returnBSPointsShort(item, 0.0025);
+  item.BS_ClosingPrice_0_point_5 = await returnBSPointsShort(item, 0.005);
+  item.BS_ClosingPrice_1_point_0 = await returnBSPointsShort(item, 0.01);
+  item.BS_ClosingPrice_3_point_0 = await returnBSPointsShort(item, 0.03);
+  item.BS_ClosingPrice_5_point_0 = await returnBSPointsShort(item, 0.05);
+  item.BS_ClosingPrice_7_point_5 = await returnBSPointsShort(item, 0.075);
+  item.BS_ClosingPrice_10_point_0 = await returnBSPointsShort(item, 0.1);
+
+  return item;
+};
+
 
 // function returnSSPoints(item, pointValue) {
 //   let SSnewCalzp5 = item.open * (1 - pointValue);
@@ -189,6 +242,75 @@ async function returnBSPoints(item, pointValue) {
   // );
   return result;
 }
+
+
+
+// short
+
+async function returnSSPointsShort(item, pointValue) {
+  // console.log('######### Start of Input ############')
+  // console.log('Item ',item);
+  let SSnewCalzp5 = item.open * (1 - pointValue);
+  // console.log(`SSnewCalzp5 (${item.open} * (1 - ${pointValue})):`, SSnewCalzp5);
+
+  let SSzp51 =   item.open - SSnewCalzp5;
+  // console.log(`SSzp51 (${item.open} - ${SSnewCalzp5}):`, SSzp51);
+
+  let SSzp52 =  Math.max(SSnewCalzp5 - item.CEstrikePrice, 0) - item.CEOpenPrice;
+  // console.log(
+  //   `SSzp52 ( Math.max(${SSnewCalzp5} - ${item.CEstrikePrice}, 0) ${item.CEOpenPrice} -):`,
+  //   SSzp52
+  // );
+
+  let SSzp53 =item.PEOpenPrice - Math.max( item.PEstrikePrice - SSnewCalzp5,0);
+  // console.log(
+  //   `SSzp53 ${item.PEOpenPrice} - Math.max( ${item.PEstrikePrice} - ${SSnewCalzp5}}, 0)`
+  // );
+
+  // console.log('S3 ', SSzp53)
+  let result = SSzp51 + SSzp52 + SSzp53;
+  // console.log(
+  //   `Selling Final result with this ${pointValue} Point Value = (${SSzp51} + ${SSzp52} + ${SSzp53}):`,
+  //   result
+  // );
+
+  // console.log('######### END of Input ############')
+  return result;
+}
+
+
+async function returnBSPointsShort(item, pointValue) {
+ // console.log('######### Start of Input ############')
+  // console.log('Item ',item);
+  let SSnewCalzp5 = item.open * (1 + pointValue);
+  // console.log(`SSnewCalzp5 (${item.open} * (1 - ${pointValue})):`, SSnewCalzp5);
+
+  let SSzp51 =   item.open - SSnewCalzp5;
+  // console.log(`SSzp51 (${item.open} - ${SSnewCalzp5}):`, SSzp51);
+
+  let SSzp52 =  Math.max(SSnewCalzp5 - item.CEstrikePrice, 0) - item.CEOpenPrice;
+  // console.log(
+  //   `SSzp52 ( Math.max(${SSnewCalzp5} - ${item.CEstrikePrice}, 0) ${item.CEOpenPrice} -):`,
+  //   SSzp52
+  // );
+
+  let SSzp53 =item.PEOpenPrice - Math.max( item.PEstrikePrice - SSnewCalzp5,0);
+  // console.log(
+  //   `SSzp53 ${item.PEOpenPrice} - Math.max( ${item.PEstrikePrice} - ${SSnewCalzp5}}, 0)`
+  // );
+
+  // console.log('S3 ', SSzp53)
+  let result = SSzp51 + SSzp52 + SSzp53;
+  // console.log(
+  //   `Selling Final result with this ${pointValue} Point Value = (${SSzp51} + ${SSzp52} + ${SSzp53}):`,
+  //   result
+  // );
+
+  // console.log('######### END of Input ############')
+  return result;
+}
+
+
 
 export const sendEmailNotification = async () => {
   let transporter = nodemailer.createTransport({

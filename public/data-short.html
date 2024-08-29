@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Data Table</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/dataTables.bootstrap4.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .table-container {
+            max-width: 100%;
+            margin: auto;
+        }
+        .table-responsive {
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .positive {
+            color: green;
+        }
+        .negative {
+            color: red;
+        }
+        #fixed_header{
+             position: sticky;
+            top:10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="table-container">
+            <div class="table-responsive">
+                <table id="dataTable" class="table table-bordered table-hover">
+                    <thead class="thead-dark" id="fixed_header">
+                        <tr>
+                            <th>Company</th>
+                            <th>Strike Price (PE)</th>
+                            <th>Strike Price (CE)</th>
+                            <th>Open Price</th>
+                            <th>CE Open Price</th>
+                            <th>PE Open Price</th>
+                            <th>Max Profit</th>
+                            <th>Max Loss</th>
+                            <th>SS 0.25</th>
+                            <th>SS 0.5</th>
+                            <th>SS 1.0</th>
+                            <th>SS 3.0</th>
+                            <th>SS 5.0</th>
+                            <th>SS 7.5</th>
+                            <th>SS 10.0</th>
+                            <th>BS 0.25</th>
+                            <th>BS 0.5</th>
+                            <th>BS 1.0</th>
+                            <th>BS 3.0</th>
+                            <th>BS 5.0</th>
+                            <th>BS 7.5</th>
+                            <th>BS 10.0</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated by AJAX -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/dataTables.bootstrap4.min.js"></script>
+
+
+    <script>
+        $(document).ready(function () {
+            let table = $('#dataTable').DataTable({
+                "paging": true,
+                "pageLength": 50, 
+                "searching": true,
+                "ordering": true,
+                "info": true,
+                "autoWidth": true
+            });
+
+        
+
+      
+            function fetchData() {
+                $.ajax({
+                    url: '/get-updated-always-short', // Replace with your actual API endpoint
+                    type: 'GET',
+                    success: function (data) {
+                        table.clear().draw(); // Clear the table before adding new data
+                        
+                        data.forEach(item => {
+                            // Iterate over each object in the array
+                            let key = Object.keys(item)[0]; // Get the company name
+                            let value = item[key]; // Get the data object
+
+                            // Skip if the object is empty
+                            if (Object.keys(value).length === 0) return;
+
+                             // Extract all the closing prices
+                            let ssValues = [
+                                value.SS_ClosingPrice_0_point_25,
+                                value.SS_ClosingPrice_0_point_5,
+                                value.SS_ClosingPrice_1_point_0,
+                                value.SS_ClosingPrice_3_point_0,
+                                value.SS_ClosingPrice_5_point_0,
+                                value.SS_ClosingPrice_7_point_5,
+                                value.SS_ClosingPrice_10_point_0
+                            ];
+                            let bsValues = [
+                                value.BS_ClosingPrice_0_point_25,
+                                value.BS_ClosingPrice_0_point_5,
+                                value.BS_ClosingPrice_1_point_0,
+                                value.BS_ClosingPrice_3_point_0,
+                                value.BS_ClosingPrice_5_point_0,
+                                value.BS_ClosingPrice_7_point_5,
+                                value.BS_ClosingPrice_10_point_0
+                            ];
+                            
+                            // Combine all values to find max and min
+                            let allValues = ssValues.concat(bsValues);
+                            let maxProfit = Math.max(...allValues);
+                            let maxLoss = Math.min(...allValues);
+
+                            // Determine CSS class based on profit/loss
+                            let maxProfitClass = maxProfit >= 0 ? 'positive' : 'negative';
+                            let maxLossClass = maxLoss >= 0 ? 'positive' : 'negative';
+                            
+
+                            // Otherwise, add the row to the table
+                            let rowHtml = `
+                                <tr>
+                                    <td>${key}</td>
+                                    <td>${value.PEstrikePrice}</td>
+                                    <td>${value.CEstrikePrice}</td>
+                                    <td>${value.open}</td>
+                                    <td>${value.CEOpenPrice}</td>
+                                    <td>${value.PEOpenPrice}</td>
+                                     <td class="${maxProfitClass}">${maxProfit.toFixed(2)}</td>
+                                    <td class="${maxLossClass}">${maxLoss?.toFixed(2)}</td>
+                                    <td class="${value.SS_ClosingPrice_0_point_25 >= 0 ? 'positive' : 'negative'}">${value.SS_ClosingPrice_0_point_25.toFixed(2)}</td>
+                                    <td class="${value.SS_ClosingPrice_0_point_5 >= 0 ? 'positive' : 'negative'}">${value.SS_ClosingPrice_0_point_5.toFixed(2)}</td>
+                                    <td class="${value.SS_ClosingPrice_1_point_0 >= 0 ? 'positive' : 'negative'}">${value.SS_ClosingPrice_1_point_0.toFixed(2)}</td>
+                                    <td class="${value.SS_ClosingPrice_3_point_0 >= 0 ? 'positive' : 'negative'}">${value.SS_ClosingPrice_3_point_0.toFixed(2)}</td>
+                                    <td class="${value.SS_ClosingPrice_5_point_0 >= 0 ? 'positive' : 'negative'}">${value.SS_ClosingPrice_5_point_0?.toFixed(2)}</td>
+                                    <td class="${value.SS_ClosingPrice_7_point_5 >= 0 ? 'positive' : 'negative'}">${value.SS_ClosingPrice_7_point_5?.toFixed(2)}</td>
+                                    <td class="${value.SS_ClosingPrice_10_point_0 >= 0 ? 'positive' : 'negative'}">${value.SS_ClosingPrice_10_point_0?.toFixed(2)}</td>
+                                    <td class="${value.BS_ClosingPrice_0_point_25 >= 0 ? 'positive' : 'negative'}">${value.BS_ClosingPrice_0_point_25?.toFixed(2)}</td>
+                                    <td class="${value.BS_ClosingPrice_0_point_5 >= 0 ? 'positive' : 'negative'}">${value.BS_ClosingPrice_0_point_5?.toFixed(2)}</td>
+                                    <td class="${value.BS_ClosingPrice_1_point_0 >= 0 ? 'positive' : 'negative'}">${value.BS_ClosingPrice_1_point_0?.toFixed(2)}</td>
+                                    <td class="${value.BS_ClosingPrice_3_point_0 >= 0 ? 'positive' : 'negative'}">${value.BS_ClosingPrice_3_point_0?.toFixed(2)}</td>
+                                    <td class="${value.BS_ClosingPrice_5_point_0 >= 0 ? 'positive' : 'negative'}">${value.BS_ClosingPrice_5_point_0?.toFixed(2)}</td>
+                                    <td class="${value.BS_ClosingPrice_7_point_5 >= 0 ? 'positive' : 'negative'}">${value.BS_ClosingPrice_7_point_5?.toFixed(2)}</td>
+                                    <td class="${value.BS_ClosingPrice_10_point_0 >= 0 ? 'positive' : 'negative'}">${value.BS_ClosingPrice_10_point_0?.toFixed(2)}</td>
+                                </tr>
+                            `;
+                            table.row.add($(rowHtml)).draw();
+                               
+                        });
+                    },
+                    error: function (error) {
+                        console.error("Error fetching data:", error);
+                    }
+                });
+            }
+
+            fetchData(); // Initial fetch
+            setInterval(fetchData, 1000); // Fetch data every second
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Summary</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/dataTables.bootstrap4.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .table-container {
+            max-width: 100%;
+            margin: auto;
+        }
+        .table-responsive {
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .positive {
+            color: green;
+        }
+        .negative {
+            color: red;
+        }
+        #fixed_header{
+             position: sticky;
+            top:10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="table-container">
+            <div class="table-responsive">
+                <table id="dataTable" class="table table-bordered table-hover">
+                    <thead class="thead-dark" id="fixed_header">
+                        <tr>
+                            <th>Company</th>
+                            <th>Open Price</th>
+                            <th>Buy Strike Price (PE)</th>
+                            <th>Buy Strike Price (CE)</th>
+                            <th>Buy CE Open Price</th>
+                            <th>Buy PE Open Price</th>
+                            <th>Sell Strike Price (PE)</th>
+                            <th>Sell Strike Price (CE)</th>
+                            <th>Sell CE Open Price</th>
+                            <th>Sell PE Open Price</th>
+                            <th>Buy Max Profit</th>
+                            <th>Buy Max Loss</th>
+                            <th>Sell Max Profit</th>
+                            <th>Sell Max Loss</th>
+                            <th>Net Result Max Profit</th>
+                            <th>Net Result Max Loss</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated by AJAX -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/dataTables.bootstrap4.min.js"></script>
+
+
+    <script>
+        $(document).ready(function () {
+            let table = $('#dataTable').DataTable({
+                "paging": true,
+                "pageLength": 50,
+                "searching": true,
+                "ordering": true,
+                "info": true,
+                "autoWidth": true
+            });
+        
+            function fetchData() {
+                // Fetch data from both APIs
+                $.when(
+                    $.ajax({ url: '/get-updated-always', type: 'GET' }),
+                    $.ajax({ url: '/get-updated-always-short', type: 'GET' })
+                ).then(function (data1, data2) {
+                    let buyData = data1[0]; // First API's data
+                    let sellData = data2[0]; // Second API's data
+        
+                    table.clear().draw(); // Clear the table before adding new data
+        
+                    // Assuming both APIs return data in the same format
+                    for (let i = 0; i < buyData.length; i++) {
+                      
+                        let companyName = Object.keys(buyData[i])[0];
+                        let buyInfo = buyData[i][companyName];
+                        let sellInfo = sellData[i][companyName];
+
+                      
+                        if (!buyInfo.open) {
+                            continue;
+                        }
+                        // Calculate Max Profit and Max Loss with null checks
+                        let buyMaxProfit = Math.max(
+                            buyInfo.SS_ClosingPrice_0_point_25 || 0, buyInfo.SS_ClosingPrice_0_point_5 || 0,
+                            buyInfo.SS_ClosingPrice_1_point_0 || 0, buyInfo.SS_ClosingPrice_3_point_0 || 0,
+                            buyInfo.SS_ClosingPrice_5_point_0 || 0, buyInfo.SS_ClosingPrice_7_point_5 || 0,
+                            buyInfo.SS_ClosingPrice_10_point_0 || 0
+                        );
+                        let buyMaxLoss = Math.min(
+                            buyInfo.SS_ClosingPrice_0_point_25 || 0, buyInfo.SS_ClosingPrice_0_point_5 || 0,
+                            buyInfo.SS_ClosingPrice_1_point_0 || 0, buyInfo.SS_ClosingPrice_3_point_0 || 0,
+                            buyInfo.SS_ClosingPrice_5_point_0 || 0, buyInfo.SS_ClosingPrice_7_point_5 || 0,
+                            buyInfo.SS_ClosingPrice_10_point_0 || 0
+                        );
+        
+                        let sellMaxProfit = Math.max(
+                            sellInfo.BS_ClosingPrice_0_point_25 || 0, sellInfo.BS_ClosingPrice_0_point_5 || 0,
+                            sellInfo.BS_ClosingPrice_1_point_0 || 0, sellInfo.BS_ClosingPrice_3_point_0 || 0,
+                            sellInfo.BS_ClosingPrice_5_point_0 || 0, sellInfo.BS_ClosingPrice_7_point_5 || 0,
+                            sellInfo.BS_ClosingPrice_10_point_0 || 0
+                        );
+                        let sellMaxLoss = Math.min(
+                            sellInfo.BS_ClosingPrice_0_point_25 || 0, sellInfo.BS_ClosingPrice_0_point_5 || 0,
+                            sellInfo.BS_ClosingPrice_1_point_0 || 0, sellInfo.BS_ClosingPrice_3_point_0 || 0,
+                            sellInfo.BS_ClosingPrice_5_point_0 || 0, sellInfo.BS_ClosingPrice_7_point_5 || 0,
+                            sellInfo.BS_ClosingPrice_10_point_0 || 0
+                        );
+        
+                        let netMaxProfit = buyMaxProfit + sellMaxProfit;
+                        let netMaxLoss = buyMaxLoss + sellMaxLoss;
+        
+                        // Function to wrap value with color span
+                        function colorize(value) {
+                            let color = value < 0 ? 'red' : 'green';
+                            return `<span style="color:${color};">${value.toFixed(2)}</span>`;
+                        }
+        
+                        // Add a row to the table with conditional color formatting
+
+                        
+
+                        table.row.add([
+                            companyName || 'N/A',
+                            buyInfo.open || 0,
+                            buyInfo.PEstrikePrice || 0,
+                            buyInfo.CEstrikePrice || 0,
+                            buyInfo.CEOpenPrice || 0,
+                            buyInfo.PEOpenPrice || 0,
+                            sellInfo.PEstrikePrice || 0,
+                            sellInfo.CEstrikePrice || 0,
+                            sellInfo.CEOpenPrice || 0,
+                            sellInfo.PEOpenPrice || 0,
+                            colorize(buyMaxProfit),
+                            colorize(buyMaxLoss),
+                            colorize(sellMaxProfit),
+                            colorize(sellMaxLoss),
+                            colorize(netMaxProfit),
+                            colorize(netMaxLoss)
+                        ]).draw(false);
+                    }
+                }).fail(function () {
+                    console.error('Error fetching data from APIs.');
+                });
+            }
+        
+            // Fetch data on page load
+            fetchData();
+        
+            // Optionally, refresh data at intervals
+            setInterval(fetchData, 1000); // Refresh every 60 seconds
+        });
+        
+        
+        
+    </script>
+</body>
+</html>
